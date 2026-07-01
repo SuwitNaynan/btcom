@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>BTCOM Controller Interface</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        #log { background: #f0f0f0; padding: 10px; border-radius: 5px; height: 200px; overflow-y: scroll; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>BTCOM Controller</h1>
+    <button id="connectBtn">Connect Device</button>
+    <br><br>
+    <input type="text" id="cmdInput" placeholder="Enter DigiROM Command">
+    <button id="sendBtn" disabled>Send</button>
+    
+    <h3>Communication Log:</h3>
+    <pre id="log"></pre>
+
+    <script>
+        const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+        const RX_CHAR_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+        const TX_CHAR_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
+        let rxChar;
+        const logEl = document.getElementById('log');
+
+        function log(msg) { logEl.innerText += msg + "\n"; logEl.scrollTop = logEl.scrollHeight; }
+
+        document.getElementById('connectBtn').onclick = async () => {
+            try {
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ namePrefix: 'BT-COM-' }],
+                    optionalServices: [SERVICE_UUID]
+                });
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService(SERVICE_UUID);
+                
+                rxChar = await service.getCharacteristic(RX_CHAR_UUID);
+                const txChar = await service.getCharacteristic(TX_CHAR_UUID);
+                
+                await txChar.startNotifications();
+                txChar.addEventListener('characteristicvaluechanged', (event) => {
+                    const value = new TextDecoder().decode(event.target.value);
+                    log("Received: " + value);
+                });
+
+                document.getElementById('sendBtn').disabled = false;
+                log("Connected to: " + device.name);
+            } catch (err) {
+                log("Error: " + err);
+            }
+        };
+
+        document.getElementById('sendBtn').onclick = async () => {
+            const cmd = document.getElementById('cmdInput').value;
+            if (!cmd) return;
+            try {
+                // ส่งข้อมูลพร้อม \n ตามที่ firmware ต้องการ
+                await rxChar.writeValue(new TextEncoder().encode(cmd + '\n'));
+                log("Sent: " + cmd);
+            } catch (err) {
+                log("Send Error: " + err);
+            }
+        };
+    </script>
+</body>
+</html>
